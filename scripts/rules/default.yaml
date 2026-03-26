@@ -1,0 +1,66 @@
+rules:
+  - id: R001
+    name: Shell Spawned by Web Process
+    severity: CRITICAL
+    event_type: execve
+    conditions:
+      comm_in: ["apache2", "nginx", "httpd", "www-data", "php", "php-fpm"]
+      filename_in: ["/bin/sh", "/bin/bash", "/bin/dash", "/tmp/"]
+
+  - id: R002
+    name: Outbound on Suspicious Port
+    severity: HIGH
+    event_type: connect
+    conditions:
+      dport_in: [4444, 1337, 31337, 9001, 6666, 6667]
+
+  - id: R003
+    name: Sensitive File Access
+    severity: HIGH
+    event_type: execve
+    conditions:
+      filename_in: ["/etc/shadow", "/etc/sudoers", "/root/.ssh"]
+
+  - id: R004
+    name: Privileged Process Execution
+    severity: HIGH
+    event_type: execve
+    conditions:
+      uid_is: 0
+      filename_in: ["/bin/bash", "/bin/sh", "/bin/dash"]
+
+  - id: R005
+    name: Outbound to Non-RFC1918 Address
+    severity: MEDIUM
+    event_type: connect
+    conditions:
+      dport_not_in: [80, 443, 53, 22, 25, 587]
+      uid_is: 0
+  - id: R006
+    name: Execution from Temporary Directory
+    severity: HIGH
+    event_type: execve
+    conditions:
+      path_contains: ["/tmp", "/var/tmp", "/dev/shm"]
+
+  - id: R007
+    name: Network Tool Execution
+    severity: MEDIUM
+    event_type: execve
+    conditions:
+      comm_in: ["nc", "netcat", "ncat", "curl", "wget", "telnet"]
+
+  - id: R010
+    name: High Port Outbound Connection
+    severity: MEDIUM
+    event_type: connect
+    conditions:
+      dport_gt: 1024
+
+  - id: R011
+    name: Root Network Activity
+    severity: HIGH
+    event_type: connect
+    conditions:
+      uid_is: 0
+      dport_not_in: [80, 443, 53, 22]
