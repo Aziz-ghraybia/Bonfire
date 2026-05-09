@@ -79,6 +79,18 @@ class RuleEngine:
                 if not any(v in event.filename for v in value):
                     return False
 
+            # parent process name must be in list
+            elif condition == "parent_comm_in":
+                if not hasattr(event, 'pcomm'):
+                    return False
+                if not any(event.pcomm == v for v in value):
+                    return False
+
+            # argument count exceeds threshold
+            elif condition == "argc_gt":
+                if not hasattr(event, 'argc') or event.argc <= value:
+                    return False
+
             # destination port must be in list
             elif condition == "dport_in":
                 if event.dport not in value:
@@ -93,6 +105,7 @@ class RuleEngine:
             elif condition == "dport_gt":
                 if not hasattr(event, 'dport') or event.dport <= value:
                     return False
+
             # destination port must NOT be in list
             elif condition == "dport_not_in":
                 if event.dport in value:

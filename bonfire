@@ -1,0 +1,33 @@
+#!/bin/bash
+
+SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)/scripts/main"
+
+case "$1" in
+    monitor)
+        sudo python3 "$SCRIPT_DIR/monitor.py"
+        ;;
+    dashboard)
+        sudo python3 "$SCRIPT_DIR/cli.py"
+        ;;
+    alerts)
+        sudo python3 "$SCRIPT_DIR/alerts.py"
+        ;;
+    rules)
+        sudo python3 "$SCRIPT_DIR/rules_viewer.py"
+        ;;
+    *)
+        echo "🔥 Bonfire — Kernel Behavior Monitor"
+        echo ""
+        echo "Usage: bonfire <command>"
+        echo ""
+        echo "Commands:"
+        echo "  dashboard    Launch live terminal dashboard"
+        echo "  monitor      Standalone terminal mode"
+        echo "  alerts       Alert inspector"
+        echo "  rules        Rules viewer"
+        echo ""
+        echo "Examples:"
+        echo "  sudo bonfire dashboard"
+        echo "  sudo bonfire monitor"
+        ;;
+esac

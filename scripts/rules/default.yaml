@@ -36,6 +36,7 @@ rules:
     conditions:
       dport_not_in: [80, 443, 53, 22, 25, 587]
       uid_is: 0
+
   - id: R006
     name: Execution from Temporary Directory
     severity: HIGH
@@ -49,6 +50,29 @@ rules:
     event_type: execve
     conditions:
       comm_in: ["nc", "netcat", "ncat", "curl", "wget", "telnet"]
+
+  - id: R008
+    name: High Argument Count Execution
+    severity: MEDIUM
+    event_type: execve
+    conditions:
+      argc_gt: 6
+
+  - id: R008b
+    name: High Argument Count by Root
+    severity: HIGH
+    event_type: execve
+    conditions:
+      argc_gt: 4
+      uid_is: 0
+
+  - id: R009
+    name: Suspicious Parent Chain
+    severity: HIGH
+    event_type: execve
+    conditions:
+      parent_comm_in: ["nginx", "apache2"]
+      comm_in: ["python3", "python", "perl", "bash", "sh"]
 
   - id: R010
     name: High Port Outbound Connection

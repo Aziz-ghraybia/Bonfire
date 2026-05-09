@@ -1,0 +1,56 @@
+{
+  "dependencies": [
+    {
+      "name": "bpfcc-tools",
+      "description": "BPF Compiler Collection tools for eBPF program loading",
+      "environment": "apt",
+      "command": "apt-get install -y bpfcc-tools",
+      "required": true
+    },
+    {
+      "name": "python3-bpfcc",
+      "description": "Python bindings for BCC — required for bcc import in monitor.py",
+      "environment": "apt",
+      "command": "apt-get install -y python3-bpfcc",
+      "required": true
+    },
+    {
+      "name": "linux-headers",
+      "description": "Kernel headers required for eBPF program compilation",
+      "environment": "apt",
+      "command": "apt-get install -y linux-headers-$(uname -r)",
+      "required": true
+    },
+    {
+      "name": "python3-pip",
+      "description": "Python package manager",
+      "environment": "apt",
+      "command": "apt-get install -y python3-pip",
+      "required": true
+    },
+    {
+      "name": "rich",
+      "description": "Terminal UI library used for CLI dashboard and viewers",
+      "environment": "pip",
+      "command": "pip3 install rich --break-system-packages",
+      "verify_command": "python3 -c \"import rich\"",
+      "required": true
+    },
+    {
+      "name": "psutil",
+      "description": "System metrics library used for CPU, memory, disk and network monitoring",
+      "environment": "pip",
+      "command": "pip3 install psutil --break-system-packages",
+      "verify_command": "python3 -c \"import psutil\"",
+      "required": true
+    },
+    {
+      "name": "pyyaml",
+      "description": "YAML parser used for loading rules from default.yaml",
+      "environment": "pip",
+      "command": "pip3 install pyyaml --break-system-packages",
+      "verify_command": "python3 -c \"import yaml\"",
+      "required": true
+}  
+  ]
+}

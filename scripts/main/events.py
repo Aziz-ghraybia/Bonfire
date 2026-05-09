@@ -6,17 +6,24 @@ from datetime import datetime
 class ExecveEvent:
     pid:       int
     uid:       int
+    ppid:      int          # parent PID
+    argc:      int          # number of arguments
     comm:      str          # process that called execve (e.g. "bash")
+    pcomm:     str          # parent process name
     filename:  str          # what it's trying to execute (e.g. "/bin/sh")
     timestamp: datetime = field(default_factory=datetime.utcnow)
 
     def is_root(self) -> bool:
         return self.uid == 0
 
+    def is_high_argc(self, threshold: int = 6) -> bool:
+        return self.argc >= threshold
+
     def __str__(self) -> str:
         return (
             f"[EXECVE] pid={self.pid} uid={self.uid} "
-            f"proc={self.comm} cmd={self.filename}"
+            f"ppid={self.ppid} parent={self.pcomm} "
+            f"proc={self.comm} cmd={self.filename} argc={self.argc}"
         )
 
 

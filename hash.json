@@ -1,0 +1,166 @@
+{
+  "entries": [
+    {
+      "name": "scripts",
+      "type": "folder",
+      "parent": "/",
+      "hash": "7498b2065cfabf515394a52476671a69c693d795ffcab953b1c9f32ab6c8ed9f"
+    },
+    {
+      "name": "main",
+      "type": "folder",
+      "parent": "scripts",
+      "hash": "d12a5b08a54fbb497f5565017ce9ca67789f6773148e200e75b5f72e180ec6f4"
+    },
+    {
+      "name": "rules",
+      "type": "folder",
+      "parent": "scripts",
+      "hash": "3f0ada440252dc8a4cad6c946c1aa6714ac7c1739da0e525e9a2ece03f7e2065"
+    },
+    {
+      "name": "ebpf",
+      "type": "folder",
+      "parent": "main",
+      "hash": "32edd3c5911ad107e74ad61c68ea355394e117f233c2ef6ee0243539a4c1ed18"
+    },
+    {
+      "name": "workers",
+      "type": "folder",
+      "parent": "main",
+      "hash": "e98dc8cb0e60ff4e8a3e9bc6407498ce95efbc983e461c9c095967c14b476e65"
+    },
+    {
+      "name": "cli.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "958b03eba9c14809bacef48457f9640565d9467ab7e723de7149125221f0416f"
+    },
+    {
+      "name": "rule_add.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "6c6b802067ac7d4699d84e6f38faa7e7c303b26729013c031af029ad1b1460f1"
+    },
+    {
+      "name": "rules_viewer.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "be4d56ea9cd95e6fe2fe959898e270362b16a6fbea6d86895f230ac80a48e313"
+    },
+    {
+      "name": "alerts_query.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "884976f6b250f863e849871348e1a938a6de22b8482274bb686a256408159457"
+    },
+    {
+      "name": "rules_query.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "26564f3990b402a154dcde7730d885c03fabd25a8e24452834765dc9d8bd78df"
+    },
+    {
+      "name": "alerts_viewer.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "27ee3181792c81b335735a23b997a1cff1a1466446edbffb94a7b2b4ab979aba"
+    },
+    {
+      "name": "warm.py",
+      "type": "file",
+      "parent": "workers",
+      "hash": "ca295d3924192a86b82f37b2381e9059c95acb2a6ef8a03134bead341b8f9365"
+    },
+    {
+      "name": "cold.py",
+      "type": "file",
+      "parent": "workers",
+      "hash": "1fcaa0c45f3d2fc73cd68c17798473dcf770f05da78aad8e9f1c75635c2bffa9"
+    },
+    {
+      "name": "dedup.py",
+      "type": "file",
+      "parent": "workers",
+      "hash": "81ea9d071dd9dc2f4fb4ebc92da84ffed1733ebf498240d06ff8b31c210a24e0"
+    },
+    {
+      "name": "hot.py",
+      "type": "file",
+      "parent": "workers",
+      "hash": "e3cdfb22c74b642eb913e49997994ac827f2101b6f1d2ff94264568a6eb17558"
+    },
+    {
+      "name": "connect.c",
+      "type": "file",
+      "parent": "ebpf",
+      "hash": "b878762a27a6808e1e78b08b3b8c703dc66abf143af09149a87554debe941687"
+    },
+    {
+      "name": "execve.c",
+      "type": "file",
+      "parent": "ebpf",
+      "hash": "1e014321724fddc4faa54aa1f08df22e5bb20041f35ecf3c7015b211d951ac1f"
+    },
+    {
+      "name": "events.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "a4f9aed6c4b55a547c4bf93638e914bea59cac7eebf3460a046518afa82aae88"
+    },
+    {
+      "name": "monitor.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "252f33edd75545781414e9c1c759ede7be171f4c1f9db6e08f78217eaa09f786"
+    },
+    {
+      "name": "correlator.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "5be8db129832af8080e8643d7e61152ded7588541f3a966a62376ba5191c1b3f"
+    },
+    {
+      "name": "logger.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "54a68a027ecf5981e290a753ef5befa8476838edeca256d6c5e336f6198457e3"
+    },
+    {
+      "name": "rule_builder.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "940254aa9432452491ad8d140a4dd5e4eeddcb85932d841a2b781aa9e35101c7"
+    },
+    {
+      "name": "metrics.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "5b375ed2d5fcd0909834d0a54eb8e32b03325d9c4bfc2103b3621816329b5222"
+    },
+    {
+      "name": "rule_form.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "51a52f94cebcdf12058e3ad1f9411cf3fea43201870d601417d6558a0b105c96"
+    },
+    {
+      "name": "rules.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "044383212210f66ce9b069c4138197dedc06a61ed4e0716e65ffcf852b2e68f2"
+    },
+    {
+      "name": "default.yaml",
+      "type": "file",
+      "parent": "rules",
+      "hash": "d964e2d89f6ed9f166053357a09f1bfcdc6de26792a50f6785d3645f82173f18"
+    },
+    {
+      "name": "dependencies.json",
+      "type": "file",
+      "parent": "/",
+      "hash": "62f5333707b577328038535455efb63d6032fad80cdcfdc2c110b251709f9b96"
+}
+  ]
+}
