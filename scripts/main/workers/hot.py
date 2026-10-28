@@ -1,25 +1,27 @@
 import json
+import gzip
 import os
 import pathlib
 import queue
+import shutil
 import threading
-from datetime import datetime
-from events import ExecveEvent, ConnectEvent
+from datetime import datetime, timezone
 
-HOT_DIR      = pathlib.Path(__file__).parent.parent.parent / "storage" / "hot"
-MAX_FILE_SIZE = 50 * 1024 * 1024   # 50MB per file before rotation
-MAX_ROTATIONS = 3                   # keep last 3 rotated files
+HOT_DIR  = pathlib.Path(__file__).parent.parent.parent / "storage" / "hot"
+WARM_DIR = pathlib.Path(__file__).parent.parent.parent / "storage" / "warm"
 
 
 class HotWorker:
 
     def __init__(self, event_queue: queue.Queue):
-        self.event_queue  = event_queue
-        self.log_path     = HOT_DIR / "bonfire.log"
-        self._stop        = threading.Event()
+        self.event_queue = event_queue
+        self._stop       = threading.Event()
 
-        # create storage dir if it doesn't exist
         HOT_DIR.mkdir(parents=True, exist_ok=True)
+        WARM_DIR.mkdir(parents=True, exist_ok=True)
+
+        # run startup checks before anything else
+        self._startup_check()
 
     # ── public ──────────────────────────────────────────────────
 
@@ -27,21 +29,91 @@ class HotWorker:
         self._thread = threading.Thread(
             target=self._run,
             name="hot-worker",
-            daemon=True             # dies automatically when main exits
+            daemon=True
         )
         self._thread.start()
 
     def stop(self):
         self._stop.set()
 
-    # ── internal loop ───────────────────────────────────────────
+    # ── startup logic ────────────────────────────────────────────
+
+    def _startup_check(self):
+        """
+        On every startup:
+        1. Check if any logs belong to a previous month → zip and move to warm
+        2. Get or create today's log file
+        3. Write the startup entry
+        """
+        self._archive_old_months()
+        self._write_startup_entry()
+
+    def _today_log_path(self) -> pathlib.Path:
+        today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
+        return HOT_DIR / f"bonfire_{today}.log"
+
+    def _archive_old_months(self):
+        """
+        Find any .log files in hot/ that belong to a previous month.
+        Group them by month, zip each group, move to warm/, delete originals.
+        """
+        now          = datetime.now(timezone.utc)
+        current_ym   = now.strftime("%Y-%m")
+        log_files    = sorted(HOT_DIR.glob("bonfire_*.log"))
+
+        # group files by year-month
+        months: dict[str, list[pathlib.Path]] = {}
+        for f in log_files:
+            # filename: bonfire_2025-01-15.log → extract 2025-01
+            parts = f.stem.split("_")   # ['bonfire', '2025-01-15']
+            if len(parts) != 2:
+                continue
+            ym = parts[1][:7]           # '2025-01'
+            if ym == current_ym:
+                continue                # skip current month
+            months.setdefault(ym, []).append(f)
+
+        for ym, files in months.items():
+            self._zip_month(ym, files)
+
+    def _zip_month(self, ym: str, files: list[pathlib.Path]):
+        """Zip all log files for a month into warm/bonfire_YYYY-MM.zip"""
+        zip_path = WARM_DIR / f"bonfire_{ym}.zip"
+
+        import zipfile
+        with zipfile.ZipFile(zip_path, "w", zipfile.ZIP_DEFLATED) as zf:
+            for f in files:
+                zf.write(f, arcname=f.name)
+
+        # delete originals after successful zip
+        for f in files:
+            f.unlink()
+
+        print(f"[hot] archived {len(files)} log files → {zip_path.name}")
+
+    def _write_startup_entry(self):
+        """Write 'Bonfire lit' marker to today's log."""
+        now = datetime.now(timezone.utc)
+        ts  = now.strftime("%d/%m/%Y %H:%M:%S")
+
+        entry = {
+            "type":      "SYSTEM",
+            "timestamp": now.isoformat(),
+            "message":   f"Bonfire lit — {ts}",
+        }
+
+        log_path = self._today_log_path()
+        with open(log_path, "a") as f:
+            f.write(json.dumps(entry) + "\n")
+
+        print(f"[hot] logging to {log_path.name}")
+
+    # ── internal loop ────────────────────────────────────────────
 
     def _run(self):
         print("[hot] worker started")
         while not self._stop.is_set():
             try:
-                # block for up to 1s waiting for an event
-                # timeout lets us check _stop regularly
                 event = self.event_queue.get(timeout=1)
                 self._write(event)
             except queue.Empty:
@@ -50,39 +122,19 @@ class HotWorker:
                 print(f"[hot] error: {e}")
 
     def _write(self, event):
-        # check if we need to rotate before writing
-        if self._should_rotate():
-            self._rotate()
+        # always write to today's log — path recalculated each time
+        # handles midnight rollover automatically
+        log_path = self._today_log_path()
+        line     = json.dumps(self._serialize(event)) + "\n"
 
-        line = json.dumps(self._serialize(event)) + "\n"
-
-        with open(self.log_path, "a") as f:
+        with open(log_path, "a") as f:
             f.write(line)
 
-    # ── rotation ────────────────────────────────────────────────
-
-    def _should_rotate(self) -> bool:
-        if not self.log_path.exists():
-            return False
-        return self.log_path.stat().st_size >= MAX_FILE_SIZE
-
-    def _rotate(self):
-        # shift existing rotations: .2 → .3, .1 → .2, base → .1
-        for i in range(MAX_ROTATIONS - 1, 0, -1):
-            src  = HOT_DIR / f"bonfire.log.{i}"
-            dest = HOT_DIR / f"bonfire.log.{i + 1}"
-            if src.exists():
-                src.rename(dest)
-
-        # move active log to .1
-        if self.log_path.exists():
-            self.log_path.rename(HOT_DIR / "bonfire.log.1")
-
-        print(f"[hot] rotated log at {datetime.utcnow().isoformat()}")
-
-    # ── serialization ───────────────────────────────────────────
+    # ── serialization ────────────────────────────────────────────
 
     def _serialize(self, event) -> dict:
+        from events import ExecveEvent, ConnectEvent
+
         base = {
             "timestamp": event.timestamp.isoformat(),
             "pid":       event.pid,
@@ -92,18 +144,17 @@ class HotWorker:
 
         if isinstance(event, ExecveEvent):
             base.update({
-                "type":     "execve",
+                "type":     "EXECVE",
                 "ppid":     event.ppid,
                 "pcomm":    event.pcomm,
                 "filename": event.filename,
                 "argc":     event.argc,
             })
-
         elif isinstance(event, ConnectEvent):
             base.update({
-                "type":  "connect",
+                "type":  "CONNECT",
                 "daddr": event.daddr,
                 "dport": event.dport,
             })
 
-        return base
+        return base 

@@ -13,7 +13,7 @@ NC='\033[0m'
 INSTALL_DIR="/opt/bonfire"
 BIN_PATH="/usr/local/bin/bonfire"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-HASHES_FILE="$SCRIPT_DIR/hash.json"
+HASHES_FILE="$SCRIPT_DIR/hashes.json"
 DEPS_FILE="$SCRIPT_DIR/dependencies.json"
 SOURCE_DIR="$SCRIPT_DIR/scripts"
 
@@ -113,51 +113,43 @@ check_deps() {
         fi
     done
 }
-
+ 
 # ── Hash helpers ─────────────────────────────────────────────────
 
-# compute sha256 of a single file
+# SHA256 of a single file
 hash_file() {
     sha256sum "$1" 2>/dev/null | awk '{print $1}'
 }
 
-# compute combined hash of all files inside a folder (recursive, sorted)
+# SHA256 of sorted direct-children file hashes
+# mirrors exactly what generate_hashes.py does
 hash_folder() {
-    find "$1" -type f | sort | xargs sha256sum 2>/dev/null | sha256sum | awk '{print $1}'
+    local folder="$1"
+    local combined=""
+    local file_hashes=()
+
+    # collect hashes of direct children files only
+    # sorted by filename — same as Python's sorted(folder.iterdir())
+    while IFS= read -r -d '' f; do
+        # skip .pyc and hidden files
+        local basename
+        basename=$(basename "$f")
+        [[ "$basename" == .* ]]         && continue
+        [[ "$basename" == *.pyc ]]      && continue
+        [[ "$basename" == *.pyo ]]      && continue
+        file_hashes+=("$(hash_file "$f")")
+    done < <(find "$folder" -maxdepth 1 -type f -print0 | sort -z)
+
+    # sort the hashes and concatenate
+    local sorted_combined
+    sorted_combined=$(printf '%s' "${file_hashes[@]}" | \
+                      fold -w 64 | sort | tr -d '\n')
+
+    # SHA256 of the combined string
+    echo -n "$sorted_combined" | sha256sum | awk '{print $1}'
 }
 
-# resolve full path from hashes.json entry
-resolve_path() {
-    local name="$1"
-    local parent="$2"
-
-    if [ "$parent" = "/" ]; then
-        echo "$SCRIPT_DIR/$name"
-    else
-        # find parent path by traversing the tree
-        local parent_path
-        parent_path=$(resolve_entry_path "$parent")
-        echo "$parent_path/$name"
-    fi
-}
-
-# get the full path of an entry by its name
-resolve_entry_path() {
-    local entry_name="$1"
-    local parent
-    parent=$(jq -r --arg n "$entry_name" \
-        '.entries[] | select(.name == $n) | .parent' "$HASHES_FILE")
-
-    if [ "$parent" = "/" ]; then
-        echo "$SCRIPT_DIR/$entry_name"
-    else
-        local parent_path
-        parent_path=$(resolve_entry_path "$parent")
-        echo "$parent_path/$entry_name"
-    fi
-}
-
-# ── Step 1: Hash validation ──────────────────────────────────────
+# ── Step 1: Hash validation ───────────────────────────────────────
 validate_hashes() {
     log_section "Step 1 — Integrity Check"
 
@@ -167,115 +159,207 @@ validate_hashes() {
     fi
 
     local corrupted=()
-    local checked=0
-    local skipped=0
 
-    # get all folder entries
-    local folders
-    folders=$(jq -r '.entries[] | select(.type == "folder") | .name' "$HASHES_FILE")
+    # ── verify root-level files ───────────────────────────────────
+    local root_file_count
+    root_file_count=$(jq '[.entries[] | select(.type=="file" and .parent=="/")] | length' "$HASHES_FILE")
 
-    for folder in $folders; do
-        local expected_hash
-        expected_hash=$(jq -r --arg n "$folder" \
-            '.entries[] | select(.name == $n) | .hash' "$HASHES_FILE")
+    for i in $(seq 0 $((root_file_count - 1))); do
+        local name expected actual path
 
-        local folder_path
-        folder_path=$(resolve_entry_path "$folder")
+        name=$(jq -r ".entries[] | select(.type==\"file\" and .parent==\"/\") | \
+               .name" "$HASHES_FILE" | sed -n "$((i+1))p")
+        expected=$(jq -r ".entries[] | select(.type==\"file\" and .parent==\"/\" \
+               and .name==\"$name\") | .hash" "$HASHES_FILE")
+        path="$SCRIPT_DIR/$name"
 
-        if [ ! -d "$folder_path" ]; then
-            log_err "Folder not found: $folder_path"
-            corrupted+=("$folder (folder missing)")
+        if [ ! -f "$path" ]; then
+            log_err "Missing: $name"
+            corrupted+=("$name (missing)")
             continue
         fi
 
-        local actual_hash
-        actual_hash=$(hash_folder "$folder_path")
-
-        if [ "$actual_hash" = "$expected_hash" ]; then
-            log_ok "Folder OK: $folder"
-            ((skipped++))
+        actual=$(hash_file "$path")
+        if [ "$actual" = "$expected" ]; then
+            log_ok "OK: $name"
         else
-            log_warn "Folder mismatch: $folder — checking files inside..."
+            log_err "Corrupted: $name"
+            corrupted+=("$name (hash mismatch)")
+        fi
+    done
 
-            # drill into folder — check each file that belongs to it
-            local file_entries
-            file_entries=$(jq -r --arg p "$folder" \
-                '.entries[] | select(.type == "file" and .parent == $p) | .name' \
+    # ── verify folders ────────────────────────────────────────────
+    local folder_names
+    mapfile -t folder_names < <(jq -r '.entries[] | select(.type=="folder") | .name' "$HASHES_FILE")
+
+    for folder_name in "${folder_names[@]}"; do
+        local expected parent folder_path actual
+
+        expected=$(jq -r --arg n "$folder_name" \
+            '.entries[] | select(.type=="folder" and .name==$n) | .hash' \
+            "$HASHES_FILE")
+        parent=$(jq -r --arg n "$folder_name" \
+            '.entries[] | select(.type=="folder" and .name==$n) | .parent' \
+            "$HASHES_FILE")
+
+        # resolve folder path
+        if [ "$parent" = "/" ]; then
+            folder_path="$SCRIPT_DIR/$folder_name"
+        else
+            # find parent folder path
+            local parent_parent
+            parent_parent=$(jq -r --arg n "$parent" \
+                '.entries[] | select(.type=="folder" and .name==$n) | .parent' \
+                "$HASHES_FILE")
+            if [ "$parent_parent" = "/" ]; then
+                folder_path="$SCRIPT_DIR/$parent/$folder_name"
+            else
+                folder_path="$SCRIPT_DIR/$parent_parent/$parent/$folder_name"
+            fi
+        fi
+
+        if [ ! -d "$folder_path" ]; then
+            log_err "Missing folder: $folder_name"
+            corrupted+=("$folder_name/ (folder missing)")
+            continue
+        fi
+
+        actual=$(hash_folder "$folder_path")
+
+        if [ "$actual" = "$expected" ]; then
+            log_ok "Folder OK: $folder_name/"
+        else
+            log_warn "Folder mismatch: $folder_name/ — checking files..."
+
+            # drill into folder — check each file individually
+            local file_names
+            mapfile -t file_names < <(jq -r --arg p "$folder_name" \
+                '.entries[] | select(.type=="file" and .parent==$p) | .name' \
                 "$HASHES_FILE")
 
-            for file in $file_entries; do
-                local expected_file_hash
-                expected_file_hash=$(jq -r --arg n "$file" \
-                    '.entries[] | select(.name == $n) | .hash' "$HASHES_FILE")
+            for file_name in "${file_names[@]}"; do
+                local f_expected f_actual f_path
 
-                local file_path="$folder_path/$file"
+                f_expected=$(jq -r --arg n "$file_name" --arg p "$folder_name" \
+                    '.entries[] | select(.type=="file" and .name==$n and .parent==$p) | .hash' \
+                    "$HASHES_FILE")
+                f_path="$folder_path/$file_name"
 
-                if [ ! -f "$file_path" ]; then
-                    log_err "  File missing: $file"
-                    corrupted+=("$folder/$file (missing)")
+                if [ ! -f "$f_path" ]; then
+                    log_err "  Missing: $folder_name/$file_name"
+                    corrupted+=("$folder_name/$file_name (missing)")
                     continue
                 fi
 
-                local actual_file_hash
-                actual_file_hash=$(hash_file "$file_path")
-                ((checked++))
-
-                if [ "$actual_file_hash" = "$expected_file_hash" ]; then
-                    log_ok "  File OK: $file"
+                f_actual=$(hash_file "$f_path")
+                if [ "$f_actual" = "$f_expected" ]; then
+                    log_ok "  OK: $file_name"
                 else
-                    log_err "  File corrupted: $file"
-                    corrupted+=("$folder/$file (hash mismatch)")
+                    log_err "  Corrupted: $file_name"
+                    corrupted+=("$folder_name/$file_name (hash mismatch)")
                 fi
             done
         fi
     done
 
-    # also check root-level files
-    local root_files
-    root_files=$(jq -r '.entries[] | select(.type == "file" and .parent == "/") | .name' \
-        "$HASHES_FILE")
-
-    for file in $root_files; do
-        local expected_hash
-        expected_hash=$(jq -r --arg n "$file" \
-            '.entries[] | select(.name == $n) | .hash' "$HASHES_FILE")
-
-        local file_path="$SCRIPT_DIR/$file"
-
-        if [ ! -f "$file_path" ]; then
-            log_err "File missing: $file"
-            corrupted+=("$file (missing)")
-            continue
-        fi
-
-        local actual_hash
-        actual_hash=$(hash_file "$file_path")
-        ((checked++))
-
-        if [ "$actual_hash" = "$expected_hash" ]; then
-            log_ok "File OK: $file"
-        else
-            log_err "File corrupted: $file"
-            corrupted+=("$file (hash mismatch)")
-        fi
-    done
-
-    # report
+    # ── report ────────────────────────────────────────────────────
     echo ""
     if [ ${#corrupted[@]} -gt 0 ]; then
-        log_err "Integrity check failed. Corrupted files:"
+        log_err "Integrity check FAILED. Corrupted or missing files:"
         echo ""
         for entry in "${corrupted[@]}"; do
             echo -e "  ${RED}  → $entry${NC}"
         done
         echo ""
-        log_err "Installation aborted. Please restore the corrupted files."
+        log_err "Installation aborted. Restore the files and try again."
         exit 1
     else
         log_ok "All files verified successfully."
     fi
 }
 
+check_unknown_files() {
+    log_section "Step 1b — Unknown File Check"
+
+    local unknown=()
+
+    # folders to scan
+    local scan_dirs=(
+        "$SCRIPT_DIR/scripts/main"
+        "$SCRIPT_DIR/scripts/main/ebpf"
+        "$SCRIPT_DIR/scripts/main/workers"
+        "$SCRIPT_DIR/scripts/rules"
+    )
+
+    for dir in "${scan_dirs[@]}"; do
+        [ ! -d "$dir" ] && continue
+        local folder_name
+        folder_name=$(basename "$dir")
+
+        while IFS= read -r -d '' f; do
+            local filename
+            filename=$(basename "$f")
+
+            # skip hidden and compiled files
+            [[ "$filename" == .* ]]     && continue
+            [[ "$filename" == *.pyc ]]  && continue
+            [[ "$filename" == *.pyo ]]  && continue
+
+            # check if this file exists in hashes.json
+            local known
+            known=$(jq -r --arg n "$filename" --arg p "$folder_name" \
+                '.entries[] | select(.name==$n and .parent==$p) | .name' \
+                "$HASHES_FILE")
+
+            if [ -z "$known" ]; then
+                log_warn "Unknown file not in manifest: $folder_name/$filename"
+                unknown+=("$folder_name/$filename")
+            fi
+
+        done < <(find "$dir" -maxdepth 1 -type f -print0)
+    done
+
+    # also check root level
+    while IFS= read -r -d '' f; do
+        local filename
+        filename=$(basename "$f")
+
+        # skip known non-script files
+        [[ "$filename" == "installer.sh" ]]       && continue
+        [[ "$filename" == "generate_hashes.py" ]] && continue
+        [[ "$filename" == "hashes.json" ]]        && continue
+        [[ "$filename" == "README.md" ]]           && continue
+        [[ "$filename" == .* ]]                    && continue
+
+        local known
+        known=$(jq -r --arg n "$filename" \
+            '.entries[] | select(.name==$n and .parent=="/") | .name' \
+            "$HASHES_FILE")
+
+        if [ -z "$known" ]; then
+            log_warn "Unknown file not in manifest: $filename"
+            unknown+=("$filename")
+        fi
+
+    done < <(find "$SCRIPT_DIR" -maxdepth 1 -type f -print0)
+
+    echo ""
+    if [ ${#unknown[@]} -gt 0 ]; then
+        log_err "Unknown files found that are not in the integrity manifest:"
+        echo ""
+        for entry in "${unknown[@]}"; do
+            echo -e "  ${RED}  → $entry${NC}"
+        done
+        echo ""
+        echo -e "  ${YELLOW}  These files were not present when hashes.json was generated.${NC}"
+        echo -e "  ${YELLOW}  If you added them intentionally, run generate_hashes.py first.${NC}"
+        echo ""
+        log_err "Installation aborted."
+        exit 1
+    else
+        log_ok "No unknown files detected."
+    fi
+}
 # ── Step 2: Install dependencies ────────────────────────────────
 install_dependencies() {
     log_section "Step 2 — Dependencies"
@@ -372,6 +456,10 @@ case "$1" in
     rules-add)
         sudo python3 "$SCRIPT_DIR/rule_add.py"
         ;;
+    archive)
+    sudo python3 "$SCRIPT_DIR/archive_viewer.py"
+    ;;
+
     help|--help|-h|"")
         echo ""
         echo "  🔥 BONFIRE — Kernel Behavior Monitor"
@@ -421,6 +509,7 @@ print_done() {
     echo -e "  ${CYAN}  sudo bonfire alerts${NC}"
     echo -e "  ${CYAN}  sudo bonfire rules${NC}"
     echo -e "  ${CYAN}  sudo bonfire rules-add${NC}"
+    echo -e "  ${CYAN}  sudo bonfire archive${NC}"  
     echo ""
     echo -e "  ${DIM}Installed to: $INSTALL_DIR${NC}"
     echo -e "  ${DIM}Command at:   $BIN_PATH${NC}"
@@ -433,6 +522,7 @@ main() {
     check_root
     check_deps
     validate_hashes
+    check_unknown_files 
     install_dependencies
     copy_files
     create_wrapper
