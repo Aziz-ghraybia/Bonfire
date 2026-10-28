@@ -10,7 +10,7 @@
       "name": "main",
       "type": "folder",
       "parent": "scripts",
-      "hash": "54cf69ea4ffeddb0cd402aaa6c8e98b7f0fd5fec40158163ca4de2061c65822e"
+      "hash": "f3d0d8ae8923308c8ebd6e75683de486d81adff28b81704121584a12bd578920"
     },
     {
       "name": "alerts_query.py",
@@ -47,6 +47,12 @@
       "type": "file",
       "parent": "main",
       "hash": "5be8db129832af8080e8643d7e61152ded7588541f3a966a62376ba5191c1b3f"
+    },
+    {
+      "name": "daemon.py",
+      "type": "file",
+      "parent": "main",
+      "hash": "da497874b4c52e36944a0faa5e00c4a7e173a266017f00b365bfe15fda7338aa"
     },
     {
       "name": "events.py",

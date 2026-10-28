@@ -289,6 +289,7 @@ check_unknown_files() {
         "$SCRIPT_DIR/scripts/main/ebpf"
         "$SCRIPT_DIR/scripts/main/workers"
         "$SCRIPT_DIR/scripts/rules"
+        "$SCRIPT_DIR/scripts/storage"
     )
 
     for dir in "${scan_dirs[@]}"; do
@@ -412,7 +413,6 @@ install_dependencies() {
 copy_files() {
     log_section "Step 3 — Installing Files"
 
-    # create destination
     if [ -d "$INSTALL_DIR" ]; then
         log_warn "/opt/bonfire already exists — overwriting."
         rm -rf "$INSTALL_DIR"
@@ -421,16 +421,22 @@ copy_files() {
     mkdir -p "$INSTALL_DIR"
     log_ok "Created $INSTALL_DIR"
 
-    # copy scripts folder
-    cp -r "$SOURCE_DIR" "$INSTALL_DIR/scripts"
+    # copy scripts — explicitly exclude storage/
+    rsync -a --exclude='storage/' \
+        "$SOURCE_DIR/" "$INSTALL_DIR/scripts/"
     log_ok "Copied scripts/ → $INSTALL_DIR/scripts/"
+
+    # create empty storage structure
+    mkdir -p "$INSTALL_DIR/scripts/storage/hot"
+    mkdir -p "$INSTALL_DIR/scripts/storage/warm"
+    mkdir -p "$INSTALL_DIR/scripts/storage/cold"
+    log_ok "Created empty storage/ directories"
 
     # set permissions
     chown -R root:root "$INSTALL_DIR"
     chmod -R 755 "$INSTALL_DIR"
     log_ok "Permissions set."
 }
-
 # ── Step 4: Create shell wrapper ─────────────────────────────────
 create_wrapper() {
     log_section "Step 4 — Creating bonfire command"
@@ -457,9 +463,17 @@ case "$1" in
         sudo python3 "$SCRIPT_DIR/rule_add.py"
         ;;
     archive)
-    sudo python3 "$SCRIPT_DIR/archive_viewer.py"
-    ;;
-
+        sudo python3 "$SCRIPT_DIR/archive_viewer.py"
+        ;;
+    start)
+        sudo python3 "$SCRIPT_DIR/daemon.py" start
+        ;;
+    stop)
+        sudo python3 "$SCRIPT_DIR/daemon.py" stop
+        ;;
+    status)
+        sudo python3 "$SCRIPT_DIR/daemon.py" status
+        ;;
     help|--help|-h|"")
         echo ""
         echo "  🔥 BONFIRE — Kernel Behavior Monitor"
@@ -467,6 +481,12 @@ case "$1" in
         echo "  Usage: bonfire <command>"
         echo ""
         echo "  Commands:"
+        echo "  Daemon Commands:"
+        echo "    start        Start Bonfire in background"
+        echo "    stop         Stop background Bonfire"
+        echo "    status       Show daemon status and stats"
+        echo ""
+        echo "  Interface Commands:"
         echo "    dashboard    Launch live terminal dashboard"
         echo "    monitor      Standalone terminal mode"
         echo "    alerts       Alert inspector"
@@ -480,7 +500,7 @@ case "$1" in
         echo "    sudo bonfire rules"
         echo "    sudo bonfire rules-add"
         echo ""
-        echo "  Version: 0.1.0"
+        echo "  Version: 2.0.0"
         echo "  Location: /opt/bonfire/"
         echo ""
         ;;
@@ -504,6 +524,11 @@ print_done() {
     echo -e "  ${GREEN}🔥 Bonfire installed successfully!${NC}"
     echo ""
     echo -e "  ${DIM}Available commands:${NC}"
+    echo -e "  ${CYAN}Daemon Commands:${NC}"
+    echo -e "    ${CYAN}start${NC}        Start Bonfire in background"
+    echo -e "    ${CYAN}stop${NC}         Stop background Bonfire"
+    echo -e "    ${CYAN}status${NC}       Show daemon status and stats"
+    echo ""
     echo -e "  ${CYAN}  sudo bonfire dashboard${NC}"
     echo -e "  ${CYAN}  sudo bonfire monitor${NC}"
     echo -e "  ${CYAN}  sudo bonfire alerts${NC}"
